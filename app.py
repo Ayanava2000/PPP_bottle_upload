@@ -129,7 +129,7 @@ for bottle in bottles:
 
     rows.append({
         "Name": bottle.get("name"),
-        "Article": bottle.get("supplierArticleNo"),
+        "Article No": bottle.get("supplierArticleNo"),
         "Image URL": image_url,
         "Height": bottle.get("height"),
         "Diameter": bottle.get("diameter"),
