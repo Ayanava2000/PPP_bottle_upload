@@ -5,6 +5,40 @@ import cv2
 import numpy as np
 from urllib.request import urlopen
 
+from concurrent.futures import ThreadPoolExecutor
+
+def get_supplier_name(id):
+    if id == "3":
+        return "Etivera"
+
+@st.cache_data(ttl=3600)
+def get_full_bottle(bottle):
+    details = get_bottle_params(headers, bottle["uuid"])
+
+    image_url = None
+    if details.get("productImages"):
+        image_url = details["productImages"][0]["url"]
+    supplier = get_supplier_name(details.get("supplierId"))
+
+    return {
+        "UUID": details.get("uuid"),
+        "Name": details.get("name"),
+        "Article No": details.get("supplierArticleNo"),
+        "Image URL": image_url,
+        "Height": details.get("height"),
+        "Diameter": details.get("diameter"),
+        "Width": details.get("width"),
+        "Depth": details.get("depth"),
+        "Supplier": supplier ,
+        "Has Image": "🟢 Yes" if details.get("productImages") else "🔴 No",
+        "Has Printing Area": "🟢 Yes" if details.get("printingAreas") else "🔴 No",
+        "Has Price": "🟢 Yes" if details.get("priceBundleId") else "🔴 No",
+        "Has Lids": "🟢 Yes" if details.get("lids") else "🔴 No",
+        "Ready for Configuration": details.get("isReadyForConfiguration")
+    }
+
+
+
 @st.cache_data(ttl=300)
 def load_bottles(headers):
 
@@ -18,8 +52,22 @@ def load_bottles(headers):
 
     return response.json()["data"]
 
+
+@st.cache_data(ttl=3600)
+def get_bottle_params(headers, uuid):
+
+    response = requests.get(
+        f"https://ppp-configurator.packperform.com/api/v1/bottles/{uuid}",
+        headers=headers,
+        timeout=20
+    )
+
+    response.raise_for_status()
+
+    return response.json()["data"]
+
 @st.cache_data
-def check_image_quality(image_url, blur_threshold=0.7, min_width=500, min_height=500):
+def check_image_quality(image_url, blur_threshold=0.4, min_width=500, min_height=500):
     """
     Returns:
         "Okay"
@@ -117,33 +165,26 @@ bottles = load_bottles(headers)
 # BUILD DATAFRAME
 # ----------------------------------------------------
 
-rows = []
 
-for bottle in bottles:
 
-    image_url = None
+progress_text = st.empty()
+progress_text.info("Loading bottle details...")
 
-    if bottle.get("productImages"):
-        image_url = bottle["productImages"][0]["url"]
-    #image_quality = check_image_quality(image_url)
+progress = st.progress(0)
 
-    rows.append({
-        "Name": bottle.get("name"),
-        "Supplier Article No": bottle.get("supplierArticleNo"),
-        "Image URL": image_url,
-        "Height": bottle.get("height"),
-        "Diameter": bottle.get("diameter"),
-        "Width": bottle.get("width"),
-        "Depth": bottle.get("depth"),
-        "Has Image": "🟢 Yes" if bottle.get("productImages") else "🔴 No",
-        #"Image Quality": image_quality,
-        "Has Printing Area": "🟢 Yes" if bottle.get("printingAreas") else "🔴 No",
-        "Has Price": "🟢 Yes" if bottle.get("priceBundleId") else "🔴 No",
-        "Has Lids": "🟢 Yes" if bottle.get("lids") else "🔴 No",
-        "Ready for Configuration": bottle.get("isReadyForConfiguration")
-    })
+with ThreadPoolExecutor(max_workers=20) as executor:
+
+    rows = []
+
+    for i, row in enumerate(executor.map(get_full_bottle, bottles)):
+        rows.append(row)
+        progress.progress((i + 1) / len(bottles))
+
+progress.empty()
+progress_text.empty()
 
 df = pd.DataFrame(rows)
+
 
 # ----------------------------------------------------
 # KPI CARDS
@@ -190,6 +231,11 @@ with right:
 
         row = df.iloc[selected_rows[0]]
 
+        details = get_bottle_params(
+            headers,
+            row["UUID"]
+        )
+
         st.markdown(f"### {row['Name']}")
 
         if row["Image URL"]:
@@ -204,11 +250,12 @@ with right:
 
         st.markdown("### Details")
 
-        st.write(f"**Supplier Article Number:** {row['Supplier Article No']}")
-        st.write(f"**Height in mm:** {row['Height']}")
-        st.write(f"**Diameter in mm:** {row['Diameter']}")
-        st.write(f"**Width in mm:** {row['Width']}")
-        st.write(f"**Depth in mm:** {row['Depth']}")
+        st.write(f"**Supplier Article Number:** {row["Article No"]}")
+        st.write(f"**Height in mm:** {row["Height"]}")
+        st.write(f"**Diameter in mm:** {row["Diameter"]}")
+        st.write(f"**Width in mm:** {row["Width"]}")
+        st.write(f"**Depth in mm:** {row["Depth"]}")
+        st.write(f"**Supplier:** {row["Supplier"]}")
 
         st.divider()
 
@@ -218,7 +265,7 @@ with right:
 
         if row["Image URL"]:
 
-            
+
 
             # Analyze image quality
             quality = check_image_quality(row["Image URL"])
