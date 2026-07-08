@@ -129,7 +129,7 @@ for bottle in bottles:
 
     rows.append({
         "Name": bottle.get("name"),
-        "Article No": bottle.get("supplierArticleNo"),
+        "Supplier Article No": bottle.get("supplierArticleNo"),
         "Image URL": image_url,
         "Height": bottle.get("height"),
         "Diameter": bottle.get("diameter"),
@@ -204,7 +204,7 @@ with right:
 
         st.markdown("### Details")
 
-        st.write(f"**Supplier Article Number:** {row['Article']}")
+        st.write(f"**Supplier Article Number:** {row['Supplier Article No']}")
         st.write(f"**Height in mm:** {row['Height']}")
         st.write(f"**Diameter in mm:** {row['Diameter']}")
         st.write(f"**Width in mm:** {row['Width']}")
