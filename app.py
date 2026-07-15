@@ -7,19 +7,27 @@ from urllib.request import urlopen
 
 from concurrent.futures import ThreadPoolExecutor
 
-def get_supplier_name(id):
-    if str(id) == "3":
-        return "Etivera"
-    return ""
+def get_supplier_name(supplier_id):
+    suppliers = {
+        "6": "Wiegand-Glas",
+        "3": "Etivera",
+        "4":"Systempack",
+        "5": "Heinz-Glas"
+    }
+    return suppliers.get(str(supplier_id), f"Unknown ({supplier_id})")
 
 @st.cache_data(ttl=3600)
 def get_full_bottle(bottle):
     details = get_bottle_params(headers, bottle["uuid"])
 
+
+
     image_url = None
     if details.get("productImages"):
         image_url = details["productImages"][0]["url"]
     supplier = get_supplier_name(details.get("supplierId"))
+
+    print(supplier)
 
     return {
         "UUID": details.get("uuid"),
