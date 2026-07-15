@@ -206,21 +206,57 @@ not_ready = total - ready
 
 c1, c2, c3 = st.columns(3)
 
-c1.metric("Total Bottles Uploaded", total)
-c2.metric("Ready for Configuration", ready)
-c3.metric("Not Ready for Configuration", not_ready)
+c1.metric("Total Bottles", total)
+c2.metric("Ready", ready)
+c3.metric("Not Ready", not_ready)
 
 supplier_counts = df["Supplier"].value_counts()
 
-st.subheader("Supplier Summary")
+st.subheader("Supplier Overview")
+
+supplier_totals = {
+    "Wiegand-Glas": 2022,
+    "Etivera": 504,
+    "Systempack": 590,
+    "Heinz-Glas": 264,
+    "Gläser & Flaschen": 385,
+    "Unknown (None)": 3
+}
+
+#supplier_counts = df["Supplier"].value_counts()
+
+st.subheader("Supplier Progress")
 
 supplier_order = [
     "Wiegand-Glas",
     "Etivera",
     "Systempack",
     "Heinz-Glas",
-    "Gläser & Flaschen",
-    "Unknown (None)"
+    "Gläser & Flaschen"
+]
+
+cols = st.columns(len(supplier_order))
+
+for col, supplier in zip(cols, supplier_order):
+
+    uploaded = supplier_counts.get(supplier, 0)
+    total = supplier_totals.get(supplier, 0)
+
+    percent = uploaded / total * 100 if total else 0
+
+    col.metric(
+        supplier,
+        f"{uploaded}/{total}",
+        delta=f"{percent:.1f}%"
+    )
+
+''' 
+supplier_order = [
+    "Wiegand-Glas",
+    "Etivera",
+    "Systempack",
+    "Heinz-Glas",
+    "Gläser & Flaschen"
 ]
 
 cols = st.columns(len(supplier_order))
@@ -228,7 +264,7 @@ cols = st.columns(len(supplier_order))
 for col, supplier in zip(cols, supplier_order):
     count = supplier_counts.get(supplier, 0)
     col.metric(supplier, count)
-
+''' 
 
 
 st.divider()
