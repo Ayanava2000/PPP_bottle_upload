@@ -219,7 +219,8 @@ supplier_order = [
     "Etivera",
     "Systempack",
     "Heinz-Glas",
-    "Gläser & Flaschen"
+    "Gläser & Flaschen",
+    "Unknown (None)"
 ]
 
 cols = st.columns(len(supplier_order))
