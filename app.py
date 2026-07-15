@@ -225,7 +225,7 @@ supplier_totals = {
 
 #supplier_counts = df["Supplier"].value_counts()
 
-st.subheader("Supplier Progress")
+
 
 supplier_order = [
     "Wiegand-Glas",
