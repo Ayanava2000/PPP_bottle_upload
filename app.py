@@ -148,7 +148,7 @@ st.caption(f"Last refreshed: {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
 title_col, refresh_col = st.columns([8, 1])
 
 with title_col:
-    st.title("Bottle Upload Dashboard")
+    st.title("Bottle Upload Backend Dashboard")
 
 with refresh_col:
     st.write("")
