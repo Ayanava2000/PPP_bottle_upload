@@ -32,9 +32,9 @@ def get_full_bottle(bottle):
         "Supplier": supplier ,
         "Has Image": "🟢 Yes" if details.get("productImages") else "🔴 No",
         "Has Printing Area": "🟢 Yes" if details.get("printingAreas") else "🔴 No",
-        "Has Price": "🟢 Yes" if details.get("priceBundleId") else "🔴 No",
-        "Has Lids": "🟢 Yes" if details.get("lids") else "🔴 No",
-        "Ready for Configuration": details.get("isReadyForConfiguration")
+        "Has Price": "🟢 Yes" if bottle.get("priceBundleId") else "🔴 No",
+        "Has Lids": "🟢 Yes" if bottle.get("lids") else "🔴 No",
+        "Ready for Configuration": bottle.get("isReadyForConfiguration")
     }
 
 
