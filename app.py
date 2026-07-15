@@ -246,25 +246,12 @@ for col, supplier in zip(cols, supplier_order):
 
     col.metric(
         supplier,
-        f"{uploaded}/{total}",
-        delta=f"{percent:.1f}%"
+        f"{uploaded}/{total}"
+        
     )
+    col.caption(f"{percent:.1f}% uploaded")
 
-''' 
-supplier_order = [
-    "Wiegand-Glas",
-    "Etivera",
-    "Systempack",
-    "Heinz-Glas",
-    "Gläser & Flaschen"
-]
 
-cols = st.columns(len(supplier_order))
-
-for col, supplier in zip(cols, supplier_order):
-    count = supplier_counts.get(supplier, 0)
-    col.metric(supplier, count)
-''' 
 
 
 st.divider()
