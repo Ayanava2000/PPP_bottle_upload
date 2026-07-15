@@ -12,7 +12,8 @@ def get_supplier_name(supplier_id):
         "6": "Wiegand-Glas",
         "3": "Etivera",
         "4":"Systempack",
-        "5": "Heinz-Glas"
+        "5": "Heinz-Glas",
+        "7": "Gläser & Flaschen"
     }
     return suppliers.get(str(supplier_id), f"Unknown ({supplier_id})")
 
@@ -208,6 +209,26 @@ c1, c2, c3 = st.columns(3)
 c1.metric("Total Bottles", total)
 c2.metric("Ready", ready)
 c3.metric("Not Ready", not_ready)
+
+supplier_counts = df["Supplier"].value_counts()
+
+st.subheader("Supplier Overview")
+
+supplier_order = [
+    "Wiegand-Glas",
+    "Etivera",
+    "Systempack",
+    "Heinz-Glas",
+    "Gläser & Flaschen"
+]
+
+cols = st.columns(len(supplier_order))
+
+for col, supplier in zip(cols, supplier_order):
+    count = supplier_counts.get(supplier, 0)
+    col.metric(supplier, count)
+
+
 
 st.divider()
 
