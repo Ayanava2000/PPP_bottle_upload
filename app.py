@@ -8,8 +8,9 @@ from urllib.request import urlopen
 from concurrent.futures import ThreadPoolExecutor
 
 def get_supplier_name(id):
-    if id == 3:
+    if str(id) == "3":
         return "Etivera"
+    return ""
 
 @st.cache_data(ttl=3600)
 def get_full_bottle(bottle):
