@@ -8,7 +8,7 @@ from urllib.request import urlopen
 from concurrent.futures import ThreadPoolExecutor
 
 def get_supplier_name(id):
-    if id == "3":
+    if id == 3:
         return "Etivera"
 
 @st.cache_data(ttl=3600)
