@@ -206,13 +206,13 @@ not_ready = total - ready
 
 c1, c2, c3 = st.columns(3)
 
-c1.metric("Total Bottles", total)
-c2.metric("Ready", ready)
-c3.metric("Not Ready", not_ready)
+c1.metric("Total Bottles Uploaded", total)
+c2.metric("Ready for Configuration", ready)
+c3.metric("Not Ready for Configuration", not_ready)
 
 supplier_counts = df["Supplier"].value_counts()
 
-st.subheader("Supplier Overview")
+st.subheader("Supplier Summary")
 
 supplier_order = [
     "Wiegand-Glas",
