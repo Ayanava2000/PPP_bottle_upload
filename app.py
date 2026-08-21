@@ -216,8 +216,8 @@ st.subheader("Supplier Overview")
 
 supplier_totals = {
     "Wiegand-Glas": 2022,
-    "Etivera": 504,
-    "Systempack": 590,
+    "Etivera": 189,
+    "Systempack": 225,
     "Heinz-Glas": 264,
     "Gläser & Flaschen": 385,
     "Unknown (None)": 3
