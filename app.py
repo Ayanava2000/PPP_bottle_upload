@@ -30,10 +30,31 @@ def get_supplier_name(supplier_id):
 
 
 # ============================================================
-# GET COMPLETE BOTTLE DATA
+# GET BOTTLE DETAILS
 # ============================================================
 
 @st.cache_data(ttl=3600)
+def get_bottle_params(headers, uuid):
+
+    response = requests.get(
+        f"https://ppp-configurator.packperform.com/api/v1/bottles/{uuid}",
+        headers=headers,
+        timeout=20
+    )
+
+    response.raise_for_status()
+
+    return response.json()["data"]
+
+
+# ============================================================
+# BUILD COMPLETE BOTTLE ROW
+#
+# IMPORTANT:
+# This function is intentionally NOT cached.
+# get_bottle_params() is already cached.
+# ============================================================
+
 def get_full_bottle(bottle):
 
     details = get_bottle_params(
@@ -46,9 +67,10 @@ def get_full_bottle(bottle):
     # ========================================================
 
     product_images = details.get("productImages") or []
-    printing_areas = details.get("printingAreas") or []
 
-    # Make sure printing_areas is actually a list
+    printing_areas = details.get("printingAreas")
+
+    # Make sure printingAreas is a list
     if not isinstance(printing_areas, list):
         printing_areas = []
 
@@ -75,26 +97,36 @@ def get_full_bottle(bottle):
     # BASIC SPECIFICATIONS
     # ========================================================
 
-    has_volume = details.get("volume") is not None
+    has_volume = (
+        details.get("volume") is not None
+    )
 
-    has_height = details.get("height") is not None
+    has_height = (
+        details.get("height") is not None
+    )
 
-    has_diameter = details.get("diameter") is not None
+    has_diameter = (
+        details.get("diameter") is not None
+    )
 
-    has_width = details.get("width") is not None
+    has_width = (
+        details.get("width") is not None
+    )
 
-    has_depth = details.get("depth") is not None
+    has_depth = (
+        details.get("depth") is not None
+    )
 
     # ========================================================
     # DIMENSION LOGIC
     #
-    # A bottle needs either:
+    # Either:
     #
-    #   Diameter
+    # Diameter
     #
-    # OR
+    # OR:
     #
-    #   Width + Depth
+    # Width + Depth
     # ========================================================
 
     has_dimensions = (
@@ -106,22 +138,25 @@ def get_full_bottle(bottle):
     )
 
     # ========================================================
-    # PRINTING AREA EXISTENCE
+    # PRINT AREA EXISTENCE
     #
-    # IMPORTANT:
+    # THIS IS THE IMPORTANT PART.
     #
-    # This ONLY checks whether the printingAreas list
-    # contains at least one item.
+    # Print Area = YES if printingAreas contains
+    # at least one object.
     #
-    # It does NOT depend on the contents of the areas.
+    # It does NOT depend on any of the fields
+    # inside the printing area.
     # ========================================================
 
-    has_printing_area = len(printing_areas) > 0
+    has_printing_area = (
+        len(printing_areas) > 0
+    )
 
     # ========================================================
-    # PRINTING AREA SPECIFICATIONS
+    # PRINTING AREA FIELD VALIDATION
     #
-    # Every printing area must contain:
+    # Every printing area must have:
     #
     # - name
     # - width
@@ -140,11 +175,26 @@ def get_full_bottle(bottle):
 
     for area in printing_areas:
 
+        # Make sure each area is a dictionary
+        if not isinstance(area, dict):
+
+            print_area_name_ok = False
+            print_area_width_ok = False
+            print_area_height_ok = False
+            print_area_bottom_distance_ok = False
+            print_area_type_ok = False
+            print_area_config_image_ok = False
+
+            continue
+
         # ----------------------------------------------------
         # NAME
         # ----------------------------------------------------
 
-        if not area.get("name"):
+        if (
+            area.get("name") is None
+            or area.get("name") == ""
+        ):
             print_area_name_ok = False
 
         # ----------------------------------------------------
@@ -189,7 +239,7 @@ def get_full_bottle(bottle):
             print_area_config_image_ok = False
 
     # ========================================================
-    # CONFIGURATION READINESS
+    # FINAL CONFIGURATION READINESS
     # ========================================================
 
     ready_for_configuration = (
@@ -225,6 +275,8 @@ def get_full_bottle(bottle):
         "Supplier Art No": details.get(
             "supplierArticleNo"
         ),
+
+        "Supplier": supplier,
 
         # ----------------------------------------------------
         # BASIC SPECIFICATIONS
@@ -273,7 +325,7 @@ def get_full_bottle(bottle):
         # ----------------------------------------------------
         # PRINT AREA
         #
-        # ONLY checks whether printingAreas contains items.
+        # ONLY checks whether printingAreas is non-empty.
         # ----------------------------------------------------
 
         "Print Area": (
@@ -339,7 +391,7 @@ def get_full_bottle(bottle):
         ),
 
         # ----------------------------------------------------
-        # CALCULATED CONFIGURATION STATUS
+        # CONFIGURATION STATUS
         # ----------------------------------------------------
 
         "Ready for Configuration": (
@@ -351,8 +403,6 @@ def get_full_bottle(bottle):
         # ----------------------------------------------------
 
         "Image URL": image_url,
-
-        "Supplier": supplier,
     }
 
 
@@ -365,24 +415,6 @@ def load_bottles(headers):
 
     response = requests.get(
         "https://ppp-configurator.packperform.com/api/v1/bottles",
-        headers=headers,
-        timeout=20
-    )
-
-    response.raise_for_status()
-
-    return response.json()["data"]
-
-
-# ============================================================
-# GET BOTTLE DETAILS
-# ============================================================
-
-@st.cache_data(ttl=3600)
-def get_bottle_params(headers, uuid):
-
-    response = requests.get(
-        f"https://ppp-configurator.packperform.com/api/v1/bottles/{uuid}",
         headers=headers,
         timeout=20
     )
@@ -428,9 +460,7 @@ def check_image_quality(
         height, width = img.shape[:2]
 
         # ----------------------------------------------------
-        # Resolution check
-        #
-        # Currently disabled.
+        # Resolution check currently disabled
         # ----------------------------------------------------
 
         # if width < min_width or height < min_height:
@@ -512,7 +542,6 @@ with refresh_col:
 
         load_bottles.clear()
         get_bottle_params.clear()
-        get_full_bottle.clear()
         check_image_quality.clear()
 
         st.rerun()
@@ -553,22 +582,26 @@ progress = st.progress(0)
 
 rows = []
 
-with ThreadPoolExecutor(
-    max_workers=20
-) as executor:
+total_api_bottles = len(bottles)
 
-    for i, row in enumerate(
-        executor.map(
-            get_full_bottle,
-            bottles
-        )
-    ):
+if total_api_bottles > 0:
 
-        rows.append(row)
+    with ThreadPoolExecutor(
+        max_workers=20
+    ) as executor:
 
-        progress.progress(
-            (i + 1) / len(bottles)
-        )
+        for i, row in enumerate(
+            executor.map(
+                get_full_bottle,
+                bottles
+            )
+        ):
+
+            rows.append(row)
+
+            progress.progress(
+                (i + 1) / total_api_bottles
+            )
 
 progress.empty()
 
@@ -583,9 +616,15 @@ df = pd.DataFrame(rows)
 
 total_bottles = len(df)
 
-ready = int(
-    df["Ready for Configuration"].sum()
-)
+if total_bottles > 0:
+
+    ready = int(
+        df["Ready for Configuration"].sum()
+    )
+
+else:
+
+    ready = 0
 
 not_ready = (
     total_bottles - ready
@@ -614,9 +653,18 @@ c3.metric(
 # SUPPLIER OVERVIEW
 # ============================================================
 
-supplier_counts = (
-    df["Supplier"].value_counts()
-)
+if not df.empty:
+
+    supplier_counts = (
+        df["Supplier"].value_counts()
+    )
+
+else:
+
+    supplier_counts = pd.Series(
+        dtype=int
+    )
+
 
 st.subheader(
     "Supplier Overview"
@@ -714,6 +762,8 @@ with left:
         "PPP Art No",
 
         "Supplier Art No",
+
+        "Supplier",
 
         "Volume",
 
@@ -905,10 +955,8 @@ with right:
 
         printing_areas = (
             details.get("printingAreas")
-            or []
         )
 
-        # Make sure it is a list
         if not isinstance(
             printing_areas,
             list
@@ -934,63 +982,35 @@ with right:
                     f"#### Printing Area {i}"
                 )
 
-                # ------------------------------------------------
-                # PRINTING AREA UUID
-                # ------------------------------------------------
-
                 st.write(
                     f"**UUID:** "
                     f"{area.get('uuid')}"
                 )
-
-                # ------------------------------------------------
-                # NAME
-                # ------------------------------------------------
 
                 st.write(
                     f"**Name:** "
                     f"{area.get('name')}"
                 )
 
-                # ------------------------------------------------
-                # WIDTH
-                # ------------------------------------------------
-
                 st.write(
                     f"**Width:** "
                     f"{area.get('width')}"
                 )
-
-                # ------------------------------------------------
-                # HEIGHT
-                # ------------------------------------------------
 
                 st.write(
                     f"**Height:** "
                     f"{area.get('height')}"
                 )
 
-                # ------------------------------------------------
-                # DISTANCE TO BOTTOM
-                # ------------------------------------------------
-
                 st.write(
                     f"**Distance to Bottom:** "
                     f"{area.get('bottomDistance')}"
                 )
 
-                # ------------------------------------------------
-                # PRINT MODES
-                # ------------------------------------------------
-
                 st.write(
                     f"**Type:** "
                     f"{area.get('printModes')}"
                 )
-
-                # ------------------------------------------------
-                # CONFIGURATION IMAGE
-                # ------------------------------------------------
 
                 config_image = (
                     area.get("configImageUrl")
@@ -1082,7 +1102,6 @@ with right:
         st.markdown(
             "### Configuration Status"
         )
-
 
         st.write(
             f"**Image:** "
