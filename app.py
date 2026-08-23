@@ -8,6 +8,12 @@ from urllib.request import urlopen
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
+from st_aggrid import (
+    AgGrid,
+    GridOptionsBuilder,
+    GridUpdateMode
+)
+
 
 # ============================================================
 # SUPPLIER
@@ -84,6 +90,21 @@ def get_full_bottle(bottle):
 
 
     # ========================================================
+    # PPP ART NO
+    # ========================================================
+
+    # PPP Art No is taken from the detailed bottle response.
+    #
+    # Fallback to the bottle list response if necessary.
+
+    ppp_art_no = (
+        details.get("artNo")
+        or bottle.get("artNo")
+        or "No"
+    )
+
+
+    # ========================================================
     # PRODUCT SPECIFICATIONS
     # ========================================================
 
@@ -104,33 +125,56 @@ def get_full_bottle(bottle):
 
         pa = printing_areas[0] or {}
 
+        # ----------------------------------------------------
+        # PRINTING AREA EXISTS
+        # ----------------------------------------------------
+
         has_printing_area = "🟢 Yes"
 
-        # PA Name
+
+        # ----------------------------------------------------
+        # PA NAME
+        # ----------------------------------------------------
+
         pa_name = yes_no_badge(
             pa.get("name")
         )
 
-        # PA Width
+
+        # ----------------------------------------------------
+        # PA WIDTH
+        # ----------------------------------------------------
+
         pa_width = yes_no_badge(
             pa.get("width")
         )
 
-        # PA Height
+
+        # ----------------------------------------------------
+        # PA HEIGHT
+        # ----------------------------------------------------
+
         pa_height = yes_no_badge(
             pa.get("height")
         )
 
-        # PA Image
-        # Specifically uses configImageUrl
+
+        # ----------------------------------------------------
+        # PA IMAGE
+        # ----------------------------------------------------
+        #
+        # PA image specifically uses configImageUrl.
+        #
+
         pa_image = yes_no_badge(
             pa.get("configImageUrl")
         )
 
     else:
 
-        # If printingAreas is empty,
-        # every PA specification is No.
+        # ----------------------------------------------------
+        # NO PRINTING AREA
+        # ----------------------------------------------------
 
         has_printing_area = "🔴 No"
 
@@ -150,16 +194,18 @@ def get_full_bottle(bottle):
 
 
     # ========================================================
-    # RETURN
+    # RETURN DATA
     # ========================================================
 
     return {
 
         # ----------------------------------------------------
-        # BASIC INFORMATION
+        # IDENTIFICATION
         # ----------------------------------------------------
 
         "UUID": details.get("uuid"),
+
+        "PPP Art No": ppp_art_no,
 
         "Name": details.get("name"),
 
@@ -173,6 +219,9 @@ def get_full_bottle(bottle):
         # ----------------------------------------------------
         # PRODUCT SPECIFICATIONS
         # ----------------------------------------------------
+        #
+        # Only Yes / No is displayed.
+        #
 
         "Height": yes_no_badge(
             height
@@ -299,6 +348,10 @@ def check_image_quality(
 
     try:
 
+        # ----------------------------------------------------
+        # DOWNLOAD IMAGE
+        # ----------------------------------------------------
+
         resp = urlopen(
             image_url,
             timeout=20
@@ -317,7 +370,17 @@ def check_image_quality(
         if img is None:
             return "Low"
 
+
+        # ----------------------------------------------------
+        # RESOLUTION
+        # ----------------------------------------------------
+
         height, width = img.shape[:2]
+
+
+        # ----------------------------------------------------
+        # BLUR DETECTION
+        # ----------------------------------------------------
 
         gray = cv2.cvtColor(
             img,
@@ -329,6 +392,7 @@ def check_image_quality(
             cv2.CV_64F
         ).var()
 
+
         if sharpness < blur_threshold:
 
             return {
@@ -338,12 +402,14 @@ def check_image_quality(
                 "sharpness": float(sharpness)
             }
 
+
         return {
             "quality": "Good",
             "width": width,
             "height": height,
             "sharpness": float(sharpness)
         }
+
 
     except Exception:
 
@@ -369,13 +435,18 @@ st.caption(
     f"{datetime.now().strftime('%d-%m-%Y %H:%M:%S')}"
 )
 
-title_col, refresh_col = st.columns([8, 1])
+
+title_col, refresh_col = st.columns(
+    [8, 1]
+)
+
 
 with title_col:
 
     st.title(
         "Bottle Upload Backend Dashboard"
     )
+
 
 with refresh_col:
 
@@ -384,6 +455,7 @@ with refresh_col:
 
     if st.button("🔄 Refresh"):
 
+        # Clear all API/data caches
         load_bottles.clear()
         get_bottle_params.clear()
         get_full_bottle.clear()
@@ -398,6 +470,7 @@ with refresh_col:
 
 api_token = st.secrets["api_token"]
 tenant_id = st.secrets["tenant_id"]
+
 
 headers = {
     "Authorization": f"Bearer {api_token}",
@@ -428,6 +501,7 @@ progress = st.progress(0)
 
 rows = []
 
+
 with ThreadPoolExecutor(
     max_workers=20
 ) as executor:
@@ -445,10 +519,14 @@ with ThreadPoolExecutor(
             (i + 1) / len(bottles)
         )
 
+
 progress.empty()
 progress_text.empty()
 
-df = pd.DataFrame(rows)
+
+df = pd.DataFrame(
+    rows
+)
 
 
 # ============================================================
@@ -456,6 +534,7 @@ df = pd.DataFrame(rows)
 # ============================================================
 
 total = len(bottles)
+
 
 ready = sum(
     bool(
@@ -466,19 +545,24 @@ ready = sum(
     for bottle in bottles
 )
 
+
 not_ready = total - ready
 
+
 c1, c2, c3 = st.columns(3)
+
 
 c1.metric(
     "Total Bottles",
     total
 )
 
+
 c2.metric(
     "Ready",
     ready
 )
+
 
 c3.metric(
     "Not Ready",
@@ -494,31 +578,47 @@ st.subheader(
     "Supplier Overview"
 )
 
+
 supplier_counts = (
     df["Supplier"]
     .value_counts()
 )
 
+
 supplier_totals = {
+
     "Wiegand-Glas": 970,
+
     "Etivera": 189,
+
     "Systempack": 225,
+
     "Heinz-Glas": 264,
+
     "Gläser & Flaschen": 385,
+
     "Unknown (None)": 3
 }
 
+
 supplier_order = [
+
     "Wiegand-Glas",
+
     "Etivera",
+
     "Systempack",
+
     "Heinz-Glas",
+
     "Gläser & Flaschen"
 ]
+
 
 cols = st.columns(
     len(supplier_order)
 )
+
 
 for col, supplier in zip(
     cols,
@@ -569,74 +669,258 @@ left, right = st.columns(
 
 with left:
 
-    table_df = df.drop(
-        columns=["Image URL"]
-    )
-
-
     # --------------------------------------------------------
-    # SPECIFIC COLUMN HEADER STYLING
+    # COLUMNS TO DISPLAY
     # --------------------------------------------------------
-    #
-    # Only these headers are made darker:
-    #
-    # Has Printing Area
-    # PA Name
-    # PA Width
-    # PA Height
-    # PA Image
-    #
 
-    dark_header_columns = [
+    display_columns = [
+
+        "PPP Art No",
+
+        "Name",
+
+        "Article No",
+
+        "Supplier",
+
+        "Height",
+
+        "Diameter",
+
+        "Width",
+
+        "Depth",
+
+        "Volume",
+
+        "Has Image",
+
         "Has Printing Area",
+
         "PA Name",
+
         "PA Width",
+
         "PA Height",
-        "PA Image"
+
+        "PA Image",
+
+        "Has Price",
+
+        "Has Lids",
+
+        "Ready for Configuration"
     ]
 
 
-    # Get the column positions
-    highlighted_indices = [
-        table_df.columns.get_loc(column) + 1
-        for column in dark_header_columns
-        if column in table_df.columns
-    ]
+    table_df = df[
+        display_columns
+    ].copy()
 
 
-    # Build CSS selectors for only those headers
-    header_selectors = ", ".join(
-        [
-            f'[role="columnheader"]:nth-child({index})'
-            for index in highlighted_indices
-        ]
+    # ========================================================
+    # AGGRID CONFIGURATION
+    # ========================================================
+
+    gb = GridOptionsBuilder.from_dataframe(
+        table_df
     )
 
 
-    st.markdown(
-        f"""
-        <style>
+    # --------------------------------------------------------
+    # DEFAULT COLUMN SETTINGS
+    # --------------------------------------------------------
 
-        /* Only selected dataframe headers */
-        [data-testid="stDataFrame"] {header_selectors} {{
-            background-color: #CBD5E1 !important;
-            color: #111827 !important;
-            font-weight: 700 !important;
-        }}
-
-        </style>
-        """,
-        unsafe_allow_html=True
+    gb.configure_default_column(
+        resizable=True,
+        sortable=True,
+        filter=True,
+        minWidth=90
     )
 
 
-    event = st.dataframe(
+    # --------------------------------------------------------
+    # COLUMN WIDTHS
+    # --------------------------------------------------------
+
+    gb.configure_column(
+        "PPP Art No",
+        width=125,
+        pinned="left"
+    )
+
+    gb.configure_column(
+        "Name",
+        width=180
+    )
+
+    gb.configure_column(
+        "Article No",
+        width=140
+    )
+
+    gb.configure_column(
+        "Supplier",
+        width=140
+    )
+
+    gb.configure_column(
+        "Height",
+        width=100
+    )
+
+    gb.configure_column(
+        "Diameter",
+        width=105
+    )
+
+    gb.configure_column(
+        "Width",
+        width=95
+    )
+
+    gb.configure_column(
+        "Depth",
+        width=95
+    )
+
+    gb.configure_column(
+        "Volume",
+        width=95
+    )
+
+    gb.configure_column(
+        "Has Image",
+        width=110
+    )
+
+    # --------------------------------------------------------
+    # PA COLUMNS
+    # --------------------------------------------------------
+
+    gb.configure_column(
+        "Has Printing Area",
+        width=145,
+        headerClass="pa-header"
+    )
+
+    gb.configure_column(
+        "PA Name",
+        width=110,
+        headerClass="pa-header"
+    )
+
+    gb.configure_column(
+        "PA Width",
+        width=105,
+        headerClass="pa-header"
+    )
+
+    gb.configure_column(
+        "PA Height",
+        width=110,
+        headerClass="pa-header"
+    )
+
+    gb.configure_column(
+        "PA Image",
+        width=105,
+        headerClass="pa-header"
+    )
+
+
+    # --------------------------------------------------------
+    # OTHER COLUMNS
+    # --------------------------------------------------------
+
+    gb.configure_column(
+        "Has Price",
+        width=105
+    )
+
+    gb.configure_column(
+        "Has Lids",
+        width=100
+    )
+
+    gb.configure_column(
+        "Ready for Configuration",
+        width=175
+    )
+
+
+    # --------------------------------------------------------
+    # ROW SELECTION
+    # --------------------------------------------------------
+
+    gb.configure_selection(
+        selection_mode="single",
+        use_checkbox=False
+    )
+
+
+    # --------------------------------------------------------
+    # GRID OPTIONS
+    # --------------------------------------------------------
+
+    grid_options = gb.build()
+
+
+    # ========================================================
+    # CUSTOM AGGRID CSS
+    # ========================================================
+
+    custom_css = {
+
+        # PA headers
+        ".pa-header": {
+            "background-color": "#CBD5E1 !important",
+            "color": "#111827 !important",
+            "font-weight": "700 !important"
+        },
+
+        # Normal headers
+        ".ag-header-cell": {
+            "font-weight": "500"
+        },
+
+        # Header text
+        ".ag-header-cell-text": {
+            "font-size": "14px"
+        },
+
+        # Selected row
+        ".ag-row-selected": {
+            "background-color": "#E5E7EB !important"
+        }
+    }
+
+
+    # ========================================================
+    # RENDER AGGRID
+    # ========================================================
+
+    grid_response = AgGrid(
+
         table_df,
-        width="stretch",
-        hide_index=True,
+
+        gridOptions=grid_options,
+
         height=700,
-        on_select="rerun",
-        selection_mode="single-row"
+
+        width="100%",
+
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+
+        allow_unsafe_jscode=False,
+
+        custom_css=custom_css,
+
+        theme="streamlit",
+
+        fit_columns_on_grid_load=False,
+
+        reload_data=False
     )
 
 
@@ -650,210 +934,295 @@ with right:
         "Bottle Preview"
     )
 
+
+    # --------------------------------------------------------
+    # GET SELECTED ROW
+    # --------------------------------------------------------
+
     selected_rows = (
-        event.selection.rows
+        grid_response.get(
+            "selected_rows",
+            []
+        )
     )
 
-    if selected_rows:
 
-        row = df.iloc[
-            selected_rows[0]
+    selected_row = None
+
+
+    if selected_rows is not None:
+
+        if isinstance(
+            selected_rows,
+            pd.DataFrame
+        ):
+
+            if not selected_rows.empty:
+                selected_row = (
+                    selected_rows.iloc[0]
+                )
+
+        elif isinstance(
+            selected_rows,
+            list
+        ):
+
+            if len(selected_rows) > 0:
+                selected_row = selected_rows[0]
+
+
+    # --------------------------------------------------------
+    # DISPLAY SELECTED BOTTLE
+    # --------------------------------------------------------
+
+    if selected_row is not None:
+
+        selected_uuid = selected_row.get(
+            "UUID"
+        )
+
+        # UUID is hidden from the table but available
+        # in the original dataframe.
+
+        matching_rows = df[
+            df["PPP Art No"]
+            == selected_row.get("PPP Art No")
         ]
 
 
-        # ----------------------------------------------------
-        # TITLE
-        # ----------------------------------------------------
+        if not matching_rows.empty:
 
-        st.markdown(
-            f"### {row['Name']}"
-        )
+            row = matching_rows.iloc[0]
 
 
-        # ----------------------------------------------------
-        # IMAGE
-        # ----------------------------------------------------
+            # ------------------------------------------------
+            # TITLE
+            # ------------------------------------------------
 
-        if row["Image URL"]:
-
-            st.image(
-                row["Image URL"],
-                width="stretch"
-            )
-
-        else:
-
-            st.warning(
-                "No image available"
+            st.markdown(
+                f"### {row['Name']}"
             )
 
 
-        st.divider()
+            # ------------------------------------------------
+            # PPP ART NO
+            # ------------------------------------------------
 
-
-        # ----------------------------------------------------
-        # DETAILS
-        # ----------------------------------------------------
-
-        st.markdown(
-            "### Details"
-        )
-
-        st.write(
-            f"**Supplier Article Number:** "
-            f"{row['Article No']}"
-        )
-
-        st.write(
-            f"**Height:** "
-            f"{row['Height']}"
-        )
-
-        st.write(
-            f"**Diameter:** "
-            f"{row['Diameter']}"
-        )
-
-        st.write(
-            f"**Width:** "
-            f"{row['Width']}"
-        )
-
-        st.write(
-            f"**Depth:** "
-            f"{row['Depth']}"
-        )
-
-        st.write(
-            f"**Volume:** "
-            f"{row['Volume']}"
-        )
-
-        st.write(
-            f"**Supplier:** "
-            f"{row['Supplier']}"
-        )
-
-
-        st.divider()
-
-
-        # ----------------------------------------------------
-        # PRINTING AREA
-        # ----------------------------------------------------
-
-        st.markdown(
-            "### Printing Area"
-        )
-
-        st.write(
-            f"**Printing Area:** "
-            f"{row['Has Printing Area']}"
-        )
-
-        st.write(
-            f"**PA Name:** "
-            f"{row['PA Name']}"
-        )
-
-        st.write(
-            f"**PA Width:** "
-            f"{row['PA Width']}"
-        )
-
-        st.write(
-            f"**PA Height:** "
-            f"{row['PA Height']}"
-        )
-
-        st.write(
-            f"**PA Image:** "
-            f"{row['PA Image']}"
-        )
-
-
-        st.divider()
-
-
-        # ----------------------------------------------------
-        # IMAGE QUALITY
-        # ----------------------------------------------------
-
-        if row["Image URL"]:
-
-            quality = check_image_quality(
-                row["Image URL"]
+            st.write(
+                f"**PPP Art No:** "
+                f"{row['PPP Art No']}"
             )
 
-            if isinstance(
-                quality,
-                dict
-            ):
 
-                msg = (
-                    f"Image Quality: "
-                    f"{quality['quality']}\n\n"
-                    f"Resolution: "
-                    f"{quality['width']} × "
-                    f"{quality['height']}\n\n"
-                    f"Sharpness: "
-                    f"{quality['sharpness']:.1f}"
+            # ------------------------------------------------
+            # IMAGE
+            # ------------------------------------------------
+
+            if row["Image URL"]:
+
+                st.image(
+                    row["Image URL"],
+                    width="stretch"
                 )
 
-                if quality["quality"] == "Good":
+            else:
 
-                    st.success(
-                        msg
+                st.warning(
+                    "No image available"
+                )
+
+
+            st.divider()
+
+
+            # ------------------------------------------------
+            # DETAILS
+            # ------------------------------------------------
+
+            st.markdown(
+                "### Details"
+            )
+
+
+            st.write(
+                f"**Supplier Article Number:** "
+                f"{row['Article No']}"
+            )
+
+
+            st.write(
+                f"**Height:** "
+                f"{row['Height']}"
+            )
+
+
+            st.write(
+                f"**Diameter:** "
+                f"{row['Diameter']}"
+            )
+
+
+            st.write(
+                f"**Width:** "
+                f"{row['Width']}"
+            )
+
+
+            st.write(
+                f"**Depth:** "
+                f"{row['Depth']}"
+            )
+
+
+            st.write(
+                f"**Volume:** "
+                f"{row['Volume']}"
+            )
+
+
+            st.write(
+                f"**Supplier:** "
+                f"{row['Supplier']}"
+            )
+
+
+            st.divider()
+
+
+            # ------------------------------------------------
+            # PRINTING AREA
+            # ------------------------------------------------
+
+            st.markdown(
+                "### Printing Area"
+            )
+
+
+            st.write(
+                f"**Printing Area:** "
+                f"{row['Has Printing Area']}"
+            )
+
+
+            st.write(
+                f"**PA Name:** "
+                f"{row['PA Name']}"
+            )
+
+
+            st.write(
+                f"**PA Width:** "
+                f"{row['PA Width']}"
+            )
+
+
+            st.write(
+                f"**PA Height:** "
+                f"{row['PA Height']}"
+            )
+
+
+            st.write(
+                f"**PA Image:** "
+                f"{row['PA Image']}"
+            )
+
+
+            st.divider()
+
+
+            # ------------------------------------------------
+            # IMAGE QUALITY
+            # ------------------------------------------------
+
+            if row["Image URL"]:
+
+                quality = check_image_quality(
+                    row["Image URL"]
+                )
+
+
+                if isinstance(
+                    quality,
+                    dict
+                ):
+
+                    msg = (
+                        f"Image Quality: "
+                        f"{quality['quality']}\n\n"
+
+                        f"Resolution: "
+                        f"{quality['width']} × "
+                        f"{quality['height']}\n\n"
+
+                        f"Sharpness: "
+                        f"{quality['sharpness']:.1f}"
                     )
+
+
+                    if quality["quality"] == "Good":
+
+                        st.success(
+                            msg
+                        )
+
+                    else:
+
+                        st.error(
+                            msg
+                        )
 
                 else:
 
                     st.error(
-                        msg
+                        f"Image Quality: {quality}"
                     )
 
             else:
 
-                st.error(
-                    f"Image Quality: {quality}"
+                st.warning(
+                    "No image available"
                 )
 
-        else:
 
-            st.warning(
-                "No image available"
+            # ------------------------------------------------
+            # STATUS
+            # ------------------------------------------------
+
+            st.write(
+                f"**Image:** "
+                f"{row['Has Image']}"
             )
 
 
-        # ----------------------------------------------------
-        # STATUS
-        # ----------------------------------------------------
+            st.write(
+                f"**Printing Area:** "
+                f"{row['Has Printing Area']}"
+            )
 
-        st.write(
-            f"**Image:** "
-            f"{row['Has Image']}"
-        )
 
-        st.write(
-            f"**Printing Area:** "
-            f"{row['Has Printing Area']}"
-        )
+            st.write(
+                f"**Price:** "
+                f"{row['Has Price']}"
+            )
 
-        st.write(
-            f"**Price:** "
-            f"{row['Has Price']}"
-        )
 
-        st.write(
-            f"**Lids:** "
-            f"{row['Has Lids']}"
-        )
+            st.write(
+                f"**Lids:** "
+                f"{row['Has Lids']}"
+            )
 
-        st.write(
-            f"**Configuration:** "
-            f"{row['Ready for Configuration']}"
-        )
 
+            st.write(
+                f"**Configuration:** "
+                f"{row['Ready for Configuration']}"
+            )
+
+        else:
+
+            st.info(
+                "Select a bottle from the table."
+            )
 
     else:
 
