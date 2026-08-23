@@ -3,3 +3,4 @@ requests
 pandas
 numpy
 opencv-python-headless
+streamlit-aggrid
