@@ -3,18 +3,16 @@ import requests
 import pandas as pd
 import cv2
 import numpy as np
-
 from urllib.request import urlopen
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 
 # ============================================================
-# SUPPLIER MAPPING
+# SUPPLIER
 # ============================================================
 
 def get_supplier_name(supplier_id):
-
     suppliers = {
         "6": "Wiegand-Glas",
         "3": "Etivera",
@@ -48,13 +46,10 @@ def get_bottle_params(headers, uuid):
 
 
 # ============================================================
-# BUILD COMPLETE BOTTLE ROW
-#
-# IMPORTANT:
-# This function is intentionally NOT cached.
-# get_bottle_params() is already cached.
+# BUILD FULL BOTTLE ROW
 # ============================================================
 
+@st.cache_data(ttl=3600)
 def get_full_bottle(bottle):
 
     details = get_bottle_params(
@@ -62,317 +57,105 @@ def get_full_bottle(bottle):
         bottle["uuid"]
     )
 
-    # ========================================================
-    # RAW DATA
-    # ========================================================
+    # --------------------------------------------------------
+    # IMAGE
+    # --------------------------------------------------------
 
     product_images = details.get("productImages") or []
-
-    printing_areas = details.get("printingAreas")
-
-    # Make sure printingAreas is a list
-    if not isinstance(printing_areas, list):
-        printing_areas = []
-
-    # ========================================================
-    # PRODUCT IMAGE
-    # ========================================================
 
     image_url = None
 
     if product_images:
         image_url = product_images[0].get("url")
 
-    has_image = len(product_images) > 0
+    # --------------------------------------------------------
+    # PRINTING AREAS
+    # --------------------------------------------------------
 
-    # ========================================================
+    # IMPORTANT:
+    # If printingAreas is [] then everything related to
+    # printing areas is explicitly set to "No".
+
+    printing_areas = details.get("printingAreas") or []
+
+    if printing_areas:
+
+        # First printing area
+        pa = printing_areas[0] or {}
+
+        pa_name = pa.get("name") or "No"
+        pa_width = pa.get("width")
+        pa_height = pa.get("height")
+        pa_diameter = pa.get("diameter")
+
+        if pa_width is None:
+            pa_width = "No"
+
+        if pa_height is None:
+            pa_height = "No"
+
+        if pa_diameter is None:
+            pa_diameter = "No"
+
+        has_printing_area = "🟢 Yes"
+
+    else:
+
+        pa_name = "No"
+        pa_width = "No"
+        pa_height = "No"
+        pa_diameter = "No"
+
+        has_printing_area = "🔴 No"
+
+    # --------------------------------------------------------
     # SUPPLIER
-    # ========================================================
+    # --------------------------------------------------------
 
     supplier = get_supplier_name(
         details.get("supplierId")
     )
 
-    # ========================================================
-    # BASIC SPECIFICATIONS
-    # ========================================================
-
-    has_volume = (
-        details.get("volume") is not None
-    )
-
-    has_height = (
-        details.get("height") is not None
-    )
-
-    has_diameter = (
-        details.get("diameter") is not None
-    )
-
-    has_width = (
-        details.get("width") is not None
-    )
-
-    has_depth = (
-        details.get("depth") is not None
-    )
-
-    # ========================================================
-    # DIMENSION LOGIC
-    #
-    # Either:
-    #
-    # Diameter
-    #
-    # OR:
-    #
-    # Width + Depth
-    # ========================================================
-
-    has_dimensions = (
-        has_diameter
-        or (
-            has_width
-            and has_depth
-        )
-    )
-
-    # ========================================================
-    # PRINT AREA EXISTENCE
-    #
-    # THIS IS THE IMPORTANT PART.
-    #
-    # Print Area = YES if printingAreas contains
-    # at least one object.
-    #
-    # It does NOT depend on any of the fields
-    # inside the printing area.
-    # ========================================================
-
-    has_printing_area = (
-        len(printing_areas) > 0
-    )
-
-    # ========================================================
-    # PRINTING AREA FIELD VALIDATION
-    #
-    # Every printing area must have:
-    #
-    # - name
-    # - width
-    # - height
-    # - bottomDistance
-    # - printModes
-    # - configImageUrl
-    # ========================================================
-
-    print_area_name_ok = True
-    print_area_width_ok = True
-    print_area_height_ok = True
-    print_area_bottom_distance_ok = True
-    print_area_type_ok = True
-    print_area_config_image_ok = True
-
-    for area in printing_areas:
-
-        # Make sure each area is a dictionary
-        if not isinstance(area, dict):
-
-            print_area_name_ok = False
-            print_area_width_ok = False
-            print_area_height_ok = False
-            print_area_bottom_distance_ok = False
-            print_area_type_ok = False
-            print_area_config_image_ok = False
-
-            continue
-
-        # ----------------------------------------------------
-        # NAME
-        # ----------------------------------------------------
-
-        if (
-            area.get("name") is None
-            or area.get("name") == ""
-        ):
-            print_area_name_ok = False
-
-        # ----------------------------------------------------
-        # WIDTH
-        # ----------------------------------------------------
-
-        if area.get("width") is None:
-            print_area_width_ok = False
-
-        # ----------------------------------------------------
-        # HEIGHT
-        # ----------------------------------------------------
-
-        if area.get("height") is None:
-            print_area_height_ok = False
-
-        # ----------------------------------------------------
-        # DISTANCE TO BOTTOM
-        # ----------------------------------------------------
-
-        if area.get("bottomDistance") is None:
-            print_area_bottom_distance_ok = False
-
-        # ----------------------------------------------------
-        # PRINT TYPE / MODES
-        #
-        # API field:
-        # "printModes"
-        #
-        # Example:
-        # ["silkscreen", "digital"]
-        # ----------------------------------------------------
-
-        if not area.get("printModes"):
-            print_area_type_ok = False
-
-        # ----------------------------------------------------
-        # CONFIGURATION IMAGE
-        # ----------------------------------------------------
-
-        if not area.get("configImageUrl"):
-            print_area_config_image_ok = False
-
-    # ========================================================
-    # FINAL CONFIGURATION READINESS
-    # ========================================================
-
-    ready_for_configuration = (
-        has_volume
-        and has_height
-        and has_dimensions
-        and has_image
-        and has_printing_area
-        and print_area_name_ok
-        and print_area_width_ok
-        and print_area_height_ok
-        and print_area_bottom_distance_ok
-        and print_area_type_ok
-        and print_area_config_image_ok
-    )
-
-    # ========================================================
-    # RETURN TABLE DATA
-    # ========================================================
+    # --------------------------------------------------------
+    # RETURN ROW
+    # --------------------------------------------------------
 
     return {
 
-        # ----------------------------------------------------
-        # IDENTIFICATION
-        # ----------------------------------------------------
-
+        # Basic
         "UUID": details.get("uuid"),
-
         "Name": details.get("name"),
+        "Article No": details.get("supplierArticleNo"),
 
-        "PPP Art No": details.get("artNo"),
+        # Image
+        "Image URL": image_url,
 
-        "Supplier Art No": details.get(
-            "supplierArticleNo"
-        ),
+        # Dimensions
+        "Height": details.get("height"),
+        "Diameter": details.get("diameter"),
+        "Width": details.get("width"),
+        "Depth": details.get("depth"),
 
+        # Supplier
         "Supplier": supplier,
 
-        # ----------------------------------------------------
-        # BASIC SPECIFICATIONS
-        # ----------------------------------------------------
-
-        "Volume": (
+        # Image status
+        "Has Image": (
             "🟢 Yes"
-            if has_volume
-            else "🔴 No"
-        ),
-
-        "Height": (
-            "🟢 Yes"
-            if has_height
-            else "🔴 No"
-        ),
-
-        "Diameter": (
-            "🟢 Yes"
-            if has_diameter
-            else "🔴 No"
-        ),
-
-        "Width": (
-            "🟢 Yes"
-            if has_width
-            else "🔴 No"
-        ),
-
-        "Depth": (
-            "🟢 Yes"
-            if has_depth
+            if product_images
             else "🔴 No"
         ),
 
         # ----------------------------------------------------
-        # IMAGE
+        # PRINTING AREA
         # ----------------------------------------------------
 
-        "Image": (
-            "🟢 Yes"
-            if has_image
-            else "🔴 No"
-        ),
+        "Has Printing Area": has_printing_area,
 
-        # ----------------------------------------------------
-        # PRINT AREA
-        #
-        # ONLY checks whether printingAreas is non-empty.
-        # ----------------------------------------------------
-
-        "Print Area": (
-            "🟢 Yes"
-            if has_printing_area
-            else "🔴 No"
-        ),
-
-        # ----------------------------------------------------
-        # PRINTING AREA SPECIFICATIONS
-        # ----------------------------------------------------
-
-        "PA Name": (
-            "🟢 Yes"
-            if print_area_name_ok
-            else "🔴 No"
-        ),
-
-        "PA Width": (
-            "🟢 Yes"
-            if print_area_width_ok
-            else "🔴 No"
-        ),
-
-        "PA Height": (
-            "🟢 Yes"
-            if print_area_height_ok
-            else "🔴 No"
-        ),
-
-        "PA Bottom Distance": (
-            "🟢 Yes"
-            if print_area_bottom_distance_ok
-            else "🔴 No"
-        ),
-
-        "PA Type": (
-            "🟢 Yes"
-            if print_area_type_ok
-            else "🔴 No"
-        ),
-
-        "PA Config Image": (
-            "🟢 Yes"
-            if print_area_config_image_ok
-            else "🔴 No"
-        ),
+        "PA Name": pa_name,
+        "PA Width": pa_width,
+        "PA Height": pa_height,
+        "PA Diameter": pa_diameter,
 
         # ----------------------------------------------------
         # OTHER STATUS
@@ -390,24 +173,14 @@ def get_full_bottle(bottle):
             else "🔴 No"
         ),
 
-        # ----------------------------------------------------
-        # CONFIGURATION STATUS
-        # ----------------------------------------------------
-
-        "Ready for Configuration": (
-            ready_for_configuration
-        ),
-
-        # ----------------------------------------------------
-        # INTERNAL DATA
-        # ----------------------------------------------------
-
-        "Image URL": image_url,
+        "Ready for Configuration": bottle.get(
+            "isReadyForConfiguration"
+        )
     }
 
 
 # ============================================================
-# LOAD ALL BOTTLES
+# LOAD BOTTLES
 # ============================================================
 
 @st.cache_data(ttl=300)
@@ -435,6 +208,19 @@ def check_image_quality(
     min_width=500,
     min_height=500
 ):
+    """
+    Returns:
+        {
+            "quality": "Good" / "Low",
+            "width": int,
+            "height": int,
+            "sharpness": float
+        }
+
+    or:
+
+        "No Image"
+    """
 
     if not image_url:
         return "No Image"
@@ -442,7 +228,10 @@ def check_image_quality(
     try:
 
         # Download image
-        resp = urlopen(image_url)
+        resp = urlopen(
+            image_url,
+            timeout=20
+        )
 
         image = np.asarray(
             bytearray(resp.read()),
@@ -460,19 +249,7 @@ def check_image_quality(
         height, width = img.shape[:2]
 
         # ----------------------------------------------------
-        # Resolution check currently disabled
-        # ----------------------------------------------------
-
-        # if width < min_width or height < min_height:
-        #     return {
-        #         "quality": "Low",
-        #         "width": width,
-        #         "height": height,
-        #         "sharpness": 0
-        #     }
-
-        # ----------------------------------------------------
-        # Blur detection
+        # BLUR DETECTION
         # ----------------------------------------------------
 
         gray = cv2.cvtColor(
@@ -540,8 +317,10 @@ with refresh_col:
 
     if st.button("🔄 Refresh"):
 
+        # Clear ALL relevant caches
         load_bottles.clear()
         get_bottle_params.clear()
+        get_full_bottle.clear()
         check_image_quality.clear()
 
         st.rerun()
@@ -552,7 +331,6 @@ with refresh_col:
 # ============================================================
 
 api_token = st.secrets["api_token"]
-
 tenant_id = st.secrets["tenant_id"]
 
 headers = {
@@ -582,30 +360,27 @@ progress = st.progress(0)
 
 rows = []
 
-total_api_bottles = len(bottles)
+with ThreadPoolExecutor(
+    max_workers=20
+) as executor:
 
-if total_api_bottles > 0:
+    for i, row in enumerate(
+        executor.map(
+            get_full_bottle,
+            bottles
+        )
+    ):
 
-    with ThreadPoolExecutor(
-        max_workers=20
-    ) as executor:
+        rows.append(row)
 
-        for i, row in enumerate(
-            executor.map(
-                get_full_bottle,
-                bottles
-            )
-        ):
+        progress.progress(
+            (i + 1) / len(bottles)
+        )
 
-            rows.append(row)
-
-            progress.progress(
-                (i + 1) / total_api_bottles
-            )
 
 progress.empty()
-
 progress_text.empty()
+
 
 df = pd.DataFrame(rows)
 
@@ -614,28 +389,20 @@ df = pd.DataFrame(rows)
 # KPI CARDS
 # ============================================================
 
-total_bottles = len(df)
+total = len(df)
 
-if total_bottles > 0:
-
-    ready = int(
-        df["Ready for Configuration"].sum()
-    )
-
-else:
-
-    ready = 0
-
-not_ready = (
-    total_bottles - ready
+ready = int(
+    df["Ready for Configuration"].sum()
 )
+
+not_ready = total - ready
 
 
 c1, c2, c3 = st.columns(3)
 
 c1.metric(
     "Total Bottles",
-    total_bottles
+    total
 )
 
 c2.metric(
@@ -653,50 +420,32 @@ c3.metric(
 # SUPPLIER OVERVIEW
 # ============================================================
 
-if not df.empty:
-
-    supplier_counts = (
-        df["Supplier"].value_counts()
-    )
-
-else:
-
-    supplier_counts = pd.Series(
-        dtype=int
-    )
-
-
 st.subheader(
     "Supplier Overview"
 )
 
 
+supplier_counts = (
+    df["Supplier"]
+    .value_counts()
+)
+
+
 supplier_totals = {
-
     "Wiegand-Glas": 970,
-
     "Etivera": 189,
-
     "Systempack": 225,
-
     "Heinz-Glas": 264,
-
     "Gläser & Flaschen": 385,
-
     "Unknown (None)": 3
 }
 
 
 supplier_order = [
-
     "Wiegand-Glas",
-
     "Etivera",
-
     "Systempack",
-
     "Heinz-Glas",
-
     "Gläser & Flaschen"
 ]
 
@@ -750,72 +499,32 @@ left, right = st.columns(
 
 
 # ============================================================
-# LEFT: BOTTLE TABLE
+# LEFT PANEL
 # ============================================================
 
 with left:
 
-    table_columns = [
+    # Hide fields that are only needed in the preview
+    # from the main table.
 
-        "UUID",
-
-        "PPP Art No",
-
-        "Supplier Art No",
-
-        "Supplier",
-
-        "Volume",
-
-        "Height",
-
-        "Diameter",
-
-        "Width",
-
-        "Depth",
-
-        "Image",
-
-        "Print Area",
-
-        "PA Name",
-
-        "PA Width",
-
-        "PA Height",
-
-        "PA Bottom Distance",
-
-        "PA Type",
-
-        "PA Config Image",
-
-        "Has Price",
-
-        "Has Lids",
-
-        "Ready for Configuration",
-    ]
+    table_df = df.drop(
+        columns=[
+            "Image URL"
+        ]
+    )
 
     event = st.dataframe(
-
-        df[table_columns],
-
+        table_df,
         width="stretch",
-
         hide_index=True,
-
         height=700,
-
         on_select="rerun",
-
         selection_mode="single-row"
     )
 
 
 # ============================================================
-# RIGHT: BOTTLE PREVIEW
+# RIGHT PANEL
 # ============================================================
 
 with right:
@@ -828,26 +537,14 @@ with right:
         event.selection.rows
     )
 
-
     if selected_rows:
 
         row = df.iloc[
             selected_rows[0]
         ]
 
-
         # ----------------------------------------------------
-        # GET COMPLETE DETAILS
-        # ----------------------------------------------------
-
-        details = get_bottle_params(
-            headers,
-            row["UUID"]
-        )
-
-
-        # ----------------------------------------------------
-        # NAME
+        # TITLE
         # ----------------------------------------------------
 
         st.markdown(
@@ -856,7 +553,7 @@ with right:
 
 
         # ----------------------------------------------------
-        # PRODUCT IMAGE
+        # IMAGE
         # ----------------------------------------------------
 
         if row["Image URL"]:
@@ -876,27 +573,37 @@ with right:
         st.divider()
 
 
-        # ====================================================
-        # IDENTIFICATION
-        # ====================================================
+        # ----------------------------------------------------
+        # BASIC DETAILS
+        # ----------------------------------------------------
 
         st.markdown(
-            "### Identification"
-        )
-
-        st.write(
-            f"**UUID:** "
-            f"{row['UUID']}"
-        )
-
-        st.write(
-            f"**PPP Article Number:** "
-            f"{row['PPP Art No']}"
+            "### Details"
         )
 
         st.write(
             f"**Supplier Article Number:** "
-            f"{row['Supplier Art No']}"
+            f"{row['Article No']}"
+        )
+
+        st.write(
+            f"**Height in mm:** "
+            f"{row['Height']}"
+        )
+
+        st.write(
+            f"**Diameter in mm:** "
+            f"{row['Diameter']}"
+        )
+
+        st.write(
+            f"**Width in mm:** "
+            f"{row['Width']}"
+        )
+
+        st.write(
+            f"**Depth in mm:** "
+            f"{row['Depth']}"
         )
 
         st.write(
@@ -908,143 +615,46 @@ with right:
         st.divider()
 
 
-        # ====================================================
-        # ACTUAL SPECIFICATIONS
-        # ====================================================
+        # ----------------------------------------------------
+        # PRINTING AREA
+        # ----------------------------------------------------
 
         st.markdown(
-            "### Specifications"
+            "### Printing Area"
         )
 
         st.write(
-            f"**Volume:** "
-            f"{details.get('volume')}"
+            f"**Printing Area:** "
+            f"{row['Has Printing Area']}"
         )
 
         st.write(
-            f"**Height:** "
-            f"{details.get('height')} mm"
+            f"**PA Name:** "
+            f"{row['PA Name']}"
         )
 
         st.write(
-            f"**Diameter:** "
-            f"{details.get('diameter')}"
+            f"**PA Width:** "
+            f"{row['PA Width']}"
         )
 
         st.write(
-            f"**Width:** "
-            f"{details.get('width')}"
+            f"**PA Height:** "
+            f"{row['PA Height']}"
         )
 
         st.write(
-            f"**Depth:** "
-            f"{details.get('depth')}"
+            f"**PA Diameter:** "
+            f"{row['PA Diameter']}"
         )
 
 
         st.divider()
 
 
-        # ====================================================
-        # PRINTING AREAS
-        # ====================================================
-
-        st.markdown(
-            "### Printing Areas"
-        )
-
-        printing_areas = (
-            details.get("printingAreas")
-        )
-
-        if not isinstance(
-            printing_areas,
-            list
-        ):
-
-            printing_areas = []
-
-
-        if not printing_areas:
-
-            st.error(
-                "🔴 No printing areas"
-            )
-
-        else:
-
-            for i, area in enumerate(
-                printing_areas,
-                start=1
-            ):
-
-                st.markdown(
-                    f"#### Printing Area {i}"
-                )
-
-                st.write(
-                    f"**UUID:** "
-                    f"{area.get('uuid')}"
-                )
-
-                st.write(
-                    f"**Name:** "
-                    f"{area.get('name')}"
-                )
-
-                st.write(
-                    f"**Width:** "
-                    f"{area.get('width')}"
-                )
-
-                st.write(
-                    f"**Height:** "
-                    f"{area.get('height')}"
-                )
-
-                st.write(
-                    f"**Distance to Bottom:** "
-                    f"{area.get('bottomDistance')}"
-                )
-
-                st.write(
-                    f"**Type:** "
-                    f"{area.get('printModes')}"
-                )
-
-                config_image = (
-                    area.get("configImageUrl")
-                )
-
-                if config_image:
-
-                    st.write(
-                        "**Configuration Image:** 🟢 Yes"
-                    )
-
-                    st.image(
-                        config_image,
-                        width="stretch"
-                    )
-
-                else:
-
-                    st.write(
-                        "**Configuration Image:** 🔴 No"
-                    )
-
-
-        st.divider()
-
-
-        # ====================================================
+        # ----------------------------------------------------
         # IMAGE QUALITY
-        # ====================================================
-
-        st.markdown(
-            "### Image Quality"
-        )
-
+        # ----------------------------------------------------
 
         if row["Image URL"]:
 
@@ -1052,38 +662,37 @@ with right:
                 row["Image URL"]
             )
 
-
             if isinstance(
                 quality,
                 dict
             ):
 
                 msg = (
-
                     f"Image Quality: "
                     f"{quality['quality']}\n\n"
-
                     f"Resolution: "
                     f"{quality['width']} × "
                     f"{quality['height']}\n\n"
-
                     f"Sharpness: "
                     f"{quality['sharpness']:.1f}"
                 )
 
-
                 if quality["quality"] == "Good":
 
-                    st.success(msg)
+                    st.success(
+                        msg
+                    )
 
                 else:
 
-                    st.error(msg)
+                    st.error(
+                        msg
+                    )
 
             else:
 
-                st.warning(
-                    str(quality)
+                st.error(
+                    f"Image Quality: {quality}"
                 )
 
         else:
@@ -1093,52 +702,54 @@ with right:
             )
 
 
-        # ====================================================
-        # CONFIGURATION STATUS
-        # ====================================================
+        # ----------------------------------------------------
+        # STATUS
+        # ----------------------------------------------------
 
-        st.divider()
+        def badge(value):
 
-        st.markdown(
-            "### Configuration Status"
-        )
+            return (
+                "🟢 Yes"
+                if value == "🟢 Yes"
+                else "🔴 No"
+            )
+
 
         st.write(
             f"**Image:** "
-            f"{row['Image']}"
+            f"{badge(row['Has Image'])}"
         )
 
         st.write(
             f"**Printing Area:** "
-            f"{row['Print Area']}"
+            f"{badge(row['Has Printing Area'])}"
         )
 
         st.write(
             f"**Price:** "
-            f"{row['Has Price']}"
+            f"{badge(row['Has Price'])}"
         )
 
         st.write(
             f"**Lids:** "
-            f"{row['Has Lids']}"
+            f"{badge(row['Has Lids'])}"
         )
 
+
+        # ----------------------------------------------------
+        # CONFIGURATION
+        # ----------------------------------------------------
 
         ready_icon = (
-
             "🟢 Ready"
-
             if row["Ready for Configuration"]
-
             else "🔴 Not Ready"
         )
-
 
         st.write(
             f"**Configuration:** "
             f"{ready_icon}"
         )
-
 
     else:
 
