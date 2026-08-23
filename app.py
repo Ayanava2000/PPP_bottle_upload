@@ -215,7 +215,7 @@ supplier_counts = df["Supplier"].value_counts()
 st.subheader("Supplier Overview")
 
 supplier_totals = {
-    "Wiegand-Glas": 2022,
+    "Wiegand-Glas": 970,
     "Etivera": 189,
     "Systempack": 225,
     "Heinz-Glas": 264,
