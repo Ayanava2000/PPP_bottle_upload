@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import cv2
 import numpy as np
+
 from urllib.request import urlopen
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -13,6 +14,7 @@ from datetime import datetime
 # ============================================================
 
 def get_supplier_name(supplier_id):
+
     suppliers = {
         "6": "Wiegand-Glas",
         "3": "Etivera",
@@ -28,7 +30,24 @@ def get_supplier_name(supplier_id):
 
 
 # ============================================================
-# GET BOTTLE DETAILS
+# YES / NO BADGE
+# ============================================================
+
+def yes_no_badge(value):
+    """
+    Returns:
+        🟢 Yes -> value exists
+        🔴 No  -> value is missing
+    """
+
+    if value is not None and value != "":
+        return "🟢 Yes"
+
+    return "🔴 No"
+
+
+# ============================================================
+# BOTTLE DETAILS API
 # ============================================================
 
 @st.cache_data(ttl=3600)
@@ -57,94 +76,187 @@ def get_full_bottle(bottle):
         bottle["uuid"]
     )
 
-    # --------------------------------------------------------
-    # IMAGE
-    # --------------------------------------------------------
+    # ========================================================
+    # PRODUCT IMAGES
+    # ========================================================
 
     product_images = details.get("productImages") or []
 
     image_url = None
 
     if product_images:
+
         image_url = product_images[0].get("url")
 
-    # --------------------------------------------------------
-    # PRINTING AREAS
-    # --------------------------------------------------------
 
-    # IMPORTANT:
-    # If printingAreas is [] then everything related to
-    # printing areas is explicitly set to "No".
+    # ========================================================
+    # PRODUCT SPECIFICATIONS
+    # ========================================================
+
+    height = details.get("height")
+    diameter = details.get("diameter")
+    width = details.get("width")
+    depth = details.get("depth")
+    volume = details.get("volume")
+
+
+    # ========================================================
+    # PRINTING AREAS
+    # ========================================================
 
     printing_areas = details.get("printingAreas") or []
 
+
     if printing_areas:
 
-        # First printing area
+        # Take the first printing area
         pa = printing_areas[0] or {}
-
-        pa_name = pa.get("name") or "No"
-        pa_width = pa.get("width")
-        pa_height = pa.get("height")
-        pa_diameter = pa.get("diameter")
-
-        if pa_width is None:
-            pa_width = "No"
-
-        if pa_height is None:
-            pa_height = "No"
-
-        if pa_diameter is None:
-            pa_diameter = "No"
 
         has_printing_area = "🟢 Yes"
 
+        # ----------------------------------------------------
+        # PA NAME
+        # ----------------------------------------------------
+
+        pa_name = yes_no_badge(
+            pa.get("name")
+        )
+
+        # ----------------------------------------------------
+        # PA WIDTH
+        # ----------------------------------------------------
+
+        pa_width = yes_no_badge(
+            pa.get("width")
+        )
+
+        # ----------------------------------------------------
+        # PA HEIGHT
+        # ----------------------------------------------------
+
+        pa_height = yes_no_badge(
+            pa.get("height")
+        )
+
+        # ----------------------------------------------------
+        # PA DIAMETER
+        # ----------------------------------------------------
+
+        pa_diameter = yes_no_badge(
+            pa.get("diameter")
+        )
+
+        # ----------------------------------------------------
+        # PA IMAGE
+        # ----------------------------------------------------
+
+        # Check the most common possible image fields.
+        pa_image = (
+            pa.get("image")
+            or pa.get("imageUrl")
+            or pa.get("url")
+            or pa.get("imageURL")
+        )
+
+        pa_image_status = yes_no_badge(
+            pa_image
+        )
+
     else:
 
-        pa_name = "No"
-        pa_width = "No"
-        pa_height = "No"
-        pa_diameter = "No"
+        # ====================================================
+        # NO PRINTING AREA
+        # ====================================================
+        #
+        # IMPORTANT:
+        # If printingAreas == [], ALL PA specifications
+        # must be No.
+        #
 
         has_printing_area = "🔴 No"
 
-    # --------------------------------------------------------
+        pa_name = "🔴 No"
+        pa_width = "🔴 No"
+        pa_height = "🔴 No"
+        pa_diameter = "🔴 No"
+        pa_image_status = "🔴 No"
+
+
+    # ========================================================
     # SUPPLIER
-    # --------------------------------------------------------
+    # ========================================================
 
     supplier = get_supplier_name(
         details.get("supplierId")
     )
 
-    # --------------------------------------------------------
-    # RETURN ROW
-    # --------------------------------------------------------
+
+    # ========================================================
+    # RETURN DATA
+    # ========================================================
 
     return {
 
-        # Basic
-        "UUID": details.get("uuid"),
-        "Name": details.get("name"),
-        "Article No": details.get("supplierArticleNo"),
+        # ----------------------------------------------------
+        # BASIC INFORMATION
+        # ----------------------------------------------------
 
-        # Image
+        "UUID": details.get("uuid"),
+
+        "Name": details.get("name"),
+
+        "Article No": details.get(
+            "supplierArticleNo"
+        ),
+
         "Image URL": image_url,
 
-        # Dimensions
-        "Height": details.get("height"),
-        "Diameter": details.get("diameter"),
-        "Width": details.get("width"),
-        "Depth": details.get("depth"),
 
-        # Supplier
+        # ----------------------------------------------------
+        # PRODUCT SPECIFICATIONS
+        # ----------------------------------------------------
+        #
+        # Only Yes / No is displayed.
+        #
+
+        "Height": yes_no_badge(
+            height
+        ),
+
+        "Diameter": yes_no_badge(
+            diameter
+        ),
+
+        "Width": yes_no_badge(
+            width
+        ),
+
+        "Depth": yes_no_badge(
+            depth
+        ),
+
+        "Volume": yes_no_badge(
+            volume
+        ),
+
+
+        # ----------------------------------------------------
+        # SUPPLIER
+        # ----------------------------------------------------
+
         "Supplier": supplier,
 
-        # Image status
+
+        # ----------------------------------------------------
+        # IMAGE
+        # ----------------------------------------------------
+
         "Has Image": (
             "🟢 Yes"
             if product_images
             else "🔴 No"
         ),
+
 
         # ----------------------------------------------------
         # PRINTING AREA
@@ -153,12 +265,18 @@ def get_full_bottle(bottle):
         "Has Printing Area": has_printing_area,
 
         "PA Name": pa_name,
+
         "PA Width": pa_width,
+
         "PA Height": pa_height,
+
         "PA Diameter": pa_diameter,
 
+        "PA Image": pa_image_status,
+
+
         # ----------------------------------------------------
-        # OTHER STATUS
+        # PRICE
         # ----------------------------------------------------
 
         "Has Price": (
@@ -167,14 +285,28 @@ def get_full_bottle(bottle):
             else "🔴 No"
         ),
 
+
+        # ----------------------------------------------------
+        # LIDS
+        # ----------------------------------------------------
+
         "Has Lids": (
             "🟢 Yes"
             if bottle.get("lids")
             else "🔴 No"
         ),
 
-        "Ready for Configuration": bottle.get(
-            "isReadyForConfiguration"
+
+        # ----------------------------------------------------
+        # CONFIGURATION
+        # ----------------------------------------------------
+
+        "Ready for Configuration": (
+            "🟢 Ready"
+            if bottle.get(
+                "isReadyForConfiguration"
+            )
+            else "🔴 Not Ready"
         )
     }
 
@@ -208,26 +340,16 @@ def check_image_quality(
     min_width=500,
     min_height=500
 ):
-    """
-    Returns:
-        {
-            "quality": "Good" / "Low",
-            "width": int,
-            "height": int,
-            "sharpness": float
-        }
-
-    or:
-
-        "No Image"
-    """
 
     if not image_url:
         return "No Image"
 
     try:
 
-        # Download image
+        # ----------------------------------------------------
+        # DOWNLOAD IMAGE
+        # ----------------------------------------------------
+
         resp = urlopen(
             image_url,
             timeout=20
@@ -246,7 +368,13 @@ def check_image_quality(
         if img is None:
             return "Low"
 
+
+        # ----------------------------------------------------
+        # RESOLUTION
+        # ----------------------------------------------------
+
         height, width = img.shape[:2]
+
 
         # ----------------------------------------------------
         # BLUR DETECTION
@@ -262,6 +390,7 @@ def check_image_quality(
             cv2.CV_64F
         ).var()
 
+
         if sharpness < blur_threshold:
 
             return {
@@ -271,12 +400,14 @@ def check_image_quality(
                 "sharpness": float(sharpness)
             }
 
+
         return {
             "quality": "Good",
             "width": width,
             "height": height,
             "sharpness": float(sharpness)
         }
+
 
     except Exception:
 
@@ -302,13 +433,18 @@ st.caption(
     f"{datetime.now().strftime('%d-%m-%Y %H:%M:%S')}"
 )
 
-title_col, refresh_col = st.columns([8, 1])
+
+title_col, refresh_col = st.columns(
+    [8, 1]
+)
+
 
 with title_col:
 
     st.title(
         "Bottle Upload Backend Dashboard"
     )
+
 
 with refresh_col:
 
@@ -333,6 +469,7 @@ with refresh_col:
 api_token = st.secrets["api_token"]
 tenant_id = st.secrets["tenant_id"]
 
+
 headers = {
     "Authorization": f"Bearer {api_token}",
     "X-Tenant-ID": tenant_id,
@@ -343,7 +480,9 @@ headers = {
 # LOAD BOTTLES
 # ============================================================
 
-bottles = load_bottles(headers)
+bottles = load_bottles(
+    headers
+)
 
 
 # ============================================================
@@ -359,6 +498,7 @@ progress_text.info(
 progress = st.progress(0)
 
 rows = []
+
 
 with ThreadPoolExecutor(
     max_workers=20
@@ -382,33 +522,45 @@ progress.empty()
 progress_text.empty()
 
 
-df = pd.DataFrame(rows)
+df = pd.DataFrame(
+    rows
+)
 
 
 # ============================================================
 # KPI CARDS
 # ============================================================
 
-total = len(df)
+total = len(bottles)
 
-ready = int(
-    df["Ready for Configuration"].sum()
+
+ready = sum(
+    bool(
+        bottle.get(
+            "isReadyForConfiguration"
+        )
+    )
+    for bottle in bottles
 )
+
 
 not_ready = total - ready
 
 
 c1, c2, c3 = st.columns(3)
 
+
 c1.metric(
     "Total Bottles",
     total
 )
 
+
 c2.metric(
     "Ready",
     ready
 )
+
 
 c3.metric(
     "Not Ready",
@@ -432,20 +584,31 @@ supplier_counts = (
 
 
 supplier_totals = {
+
     "Wiegand-Glas": 970,
+
     "Etivera": 189,
+
     "Systempack": 225,
+
     "Heinz-Glas": 264,
+
     "Gläser & Flaschen": 385,
+
     "Unknown (None)": 3
 }
 
 
 supplier_order = [
+
     "Wiegand-Glas",
+
     "Etivera",
+
     "Systempack",
+
     "Heinz-Glas",
+
     "Gläser & Flaschen"
 ]
 
@@ -504,8 +667,8 @@ left, right = st.columns(
 
 with left:
 
-    # Hide fields that are only needed in the preview
-    # from the main table.
+    # Hide image URL from table.
+    # It remains available for the preview.
 
     table_df = df.drop(
         columns=[
@@ -513,12 +676,19 @@ with left:
         ]
     )
 
+
     event = st.dataframe(
+
         table_df,
+
         width="stretch",
+
         hide_index=True,
+
         height=700,
+
         on_select="rerun",
+
         selection_mode="single-row"
     )
 
@@ -533,15 +703,18 @@ with right:
         "Bottle Preview"
     )
 
+
     selected_rows = (
         event.selection.rows
     )
+
 
     if selected_rows:
 
         row = df.iloc[
             selected_rows[0]
         ]
+
 
         # ----------------------------------------------------
         # TITLE
@@ -574,37 +747,49 @@ with right:
 
 
         # ----------------------------------------------------
-        # BASIC DETAILS
+        # DETAILS
         # ----------------------------------------------------
 
         st.markdown(
             "### Details"
         )
 
+
         st.write(
             f"**Supplier Article Number:** "
             f"{row['Article No']}"
         )
 
+
         st.write(
-            f"**Height in mm:** "
+            f"**Height:** "
             f"{row['Height']}"
         )
 
+
         st.write(
-            f"**Diameter in mm:** "
+            f"**Diameter:** "
             f"{row['Diameter']}"
         )
 
+
         st.write(
-            f"**Width in mm:** "
+            f"**Width:** "
             f"{row['Width']}"
         )
 
+
         st.write(
-            f"**Depth in mm:** "
+            f"**Depth:** "
             f"{row['Depth']}"
         )
+
+
+        st.write(
+            f"**Volume:** "
+            f"{row['Volume']}"
+        )
+
 
         st.write(
             f"**Supplier:** "
@@ -623,29 +808,40 @@ with right:
             "### Printing Area"
         )
 
+
         st.write(
             f"**Printing Area:** "
             f"{row['Has Printing Area']}"
         )
+
 
         st.write(
             f"**PA Name:** "
             f"{row['PA Name']}"
         )
 
+
         st.write(
             f"**PA Width:** "
             f"{row['PA Width']}"
         )
+
 
         st.write(
             f"**PA Height:** "
             f"{row['PA Height']}"
         )
 
+
         st.write(
             f"**PA Diameter:** "
             f"{row['PA Diameter']}"
+        )
+
+
+        st.write(
+            f"**PA Image:** "
+            f"{row['PA Image']}"
         )
 
 
@@ -662,6 +858,7 @@ with right:
                 row["Image URL"]
             )
 
+
             if isinstance(
                 quality,
                 dict
@@ -670,12 +867,15 @@ with right:
                 msg = (
                     f"Image Quality: "
                     f"{quality['quality']}\n\n"
+
                     f"Resolution: "
                     f"{quality['width']} × "
                     f"{quality['height']}\n\n"
+
                     f"Sharpness: "
                     f"{quality['sharpness']:.1f}"
                 )
+
 
                 if quality["quality"] == "Good":
 
@@ -706,50 +906,35 @@ with right:
         # STATUS
         # ----------------------------------------------------
 
-        def badge(value):
-
-            return (
-                "🟢 Yes"
-                if value == "🟢 Yes"
-                else "🔴 No"
-            )
-
-
         st.write(
             f"**Image:** "
-            f"{badge(row['Has Image'])}"
+            f"{row['Has Image']}"
         )
+
 
         st.write(
             f"**Printing Area:** "
-            f"{badge(row['Has Printing Area'])}"
+            f"{row['Has Printing Area']}"
         )
+
 
         st.write(
             f"**Price:** "
-            f"{badge(row['Has Price'])}"
+            f"{row['Has Price']}"
         )
+
 
         st.write(
             f"**Lids:** "
-            f"{badge(row['Has Lids'])}"
+            f"{row['Has Lids']}"
         )
 
-
-        # ----------------------------------------------------
-        # CONFIGURATION
-        # ----------------------------------------------------
-
-        ready_icon = (
-            "🟢 Ready"
-            if row["Ready for Configuration"]
-            else "🔴 Not Ready"
-        )
 
         st.write(
             f"**Configuration:** "
-            f"{ready_icon}"
+            f"{row['Ready for Configuration']}"
         )
+
 
     else:
 
