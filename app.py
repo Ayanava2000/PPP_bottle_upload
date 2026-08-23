@@ -14,6 +14,7 @@ from datetime import datetime
 # ============================================================
 
 def get_supplier_name(supplier_id):
+
     suppliers = {
         "6": "Wiegand-Glas",
         "3": "Etivera",
@@ -40,28 +41,38 @@ def get_full_bottle(bottle):
         bottle["uuid"]
     )
 
+    # ========================================================
+    # RAW DATA
+    # ========================================================
+
     product_images = details.get("productImages") or []
     printing_areas = details.get("printingAreas") or []
 
-    # --------------------------------------------------------
-    # IMAGE
-    # --------------------------------------------------------
+    # Make sure printing_areas is actually a list
+    if not isinstance(printing_areas, list):
+        printing_areas = []
+
+    # ========================================================
+    # PRODUCT IMAGE
+    # ========================================================
 
     image_url = None
 
     if product_images:
         image_url = product_images[0].get("url")
 
-    # --------------------------------------------------------
+    has_image = len(product_images) > 0
+
+    # ========================================================
     # SUPPLIER
-    # --------------------------------------------------------
+    # ========================================================
 
     supplier = get_supplier_name(
         details.get("supplierId")
     )
 
     # ========================================================
-    # BASIC SPECIFICATION CHECKS
+    # BASIC SPECIFICATIONS
     # ========================================================
 
     has_volume = details.get("volume") is not None
@@ -74,35 +85,50 @@ def get_full_bottle(bottle):
 
     has_depth = details.get("depth") is not None
 
-    # --------------------------------------------------------
-    # DIMENSIONS
+    # ========================================================
+    # DIMENSION LOGIC
     #
-    # Either:
-    #   diameter
+    # A bottle needs either:
     #
-    # OR:
-    #   width + depth
-    # --------------------------------------------------------
+    #   Diameter
+    #
+    # OR
+    #
+    #   Width + Depth
+    # ========================================================
 
     has_dimensions = (
         has_diameter
-        or (has_width and has_depth)
+        or (
+            has_width
+            and has_depth
+        )
     )
 
-    # --------------------------------------------------------
-    # PRODUCT IMAGE
-    # --------------------------------------------------------
+    # ========================================================
+    # PRINTING AREA EXISTENCE
+    #
+    # IMPORTANT:
+    #
+    # This ONLY checks whether the printingAreas list
+    # contains at least one item.
+    #
+    # It does NOT depend on the contents of the areas.
+    # ========================================================
 
-    has_image = bool(product_images)
-
-    # --------------------------------------------------------
-    # PRINTING AREA
-    # --------------------------------------------------------
-
-    has_printing_area = bool(printing_areas)
+    has_printing_area = len(printing_areas) > 0
 
     # ========================================================
     # PRINTING AREA SPECIFICATIONS
+    #
+    # Every printing area must contain:
+    #
+    # - name
+    # - width
+    # - height
+    # - bottomDistance
+    # - printModes
+    # - configImageUrl
     # ========================================================
 
     print_area_name_ok = True
@@ -114,32 +140,51 @@ def get_full_bottle(bottle):
 
     for area in printing_areas:
 
-        # Name
+        # ----------------------------------------------------
+        # NAME
+        # ----------------------------------------------------
+
         if not area.get("name"):
             print_area_name_ok = False
 
-        # Width
+        # ----------------------------------------------------
+        # WIDTH
+        # ----------------------------------------------------
+
         if area.get("width") is None:
             print_area_width_ok = False
 
-        # Height
+        # ----------------------------------------------------
+        # HEIGHT
+        # ----------------------------------------------------
+
         if area.get("height") is None:
             print_area_height_ok = False
 
-        # Distance to bottom
+        # ----------------------------------------------------
+        # DISTANCE TO BOTTOM
+        # ----------------------------------------------------
+
         if area.get("bottomDistance") is None:
             print_area_bottom_distance_ok = False
 
-        # Type
+        # ----------------------------------------------------
+        # PRINT TYPE / MODES
         #
-        # API field is called printModes.
+        # API field:
+        # "printModes"
+        #
         # Example:
         # ["silkscreen", "digital"]
-        #
+        # ----------------------------------------------------
+
         if not area.get("printModes"):
             print_area_type_ok = False
 
-        # Configuration image
+        # ----------------------------------------------------
+        # CONFIGURATION IMAGE
+        # ----------------------------------------------------
+
         if not area.get("configImageUrl"):
             print_area_config_image_ok = False
 
@@ -216,7 +261,7 @@ def get_full_bottle(bottle):
         ),
 
         # ----------------------------------------------------
-        # IMAGE / PRINTING AREA
+        # IMAGE
         # ----------------------------------------------------
 
         "Image": (
@@ -224,6 +269,12 @@ def get_full_bottle(bottle):
             if has_image
             else "🔴 No"
         ),
+
+        # ----------------------------------------------------
+        # PRINT AREA
+        #
+        # ONLY checks whether printingAreas contains items.
+        # ----------------------------------------------------
 
         "Print Area": (
             "🟢 Yes"
@@ -353,21 +404,6 @@ def check_image_quality(
     min_height=500
 ):
 
-    """
-    Returns:
-
-        {
-            "quality": "Good" / "Low",
-            "width": ...,
-            "height": ...,
-            "sharpness": ...
-        }
-
-    or:
-
-        "No Image"
-    """
-
     if not image_url:
         return "No Image"
 
@@ -394,8 +430,7 @@ def check_image_quality(
         # ----------------------------------------------------
         # Resolution check
         #
-        # Currently disabled because you only want to check
-        # image existence in the table.
+        # Currently disabled.
         # ----------------------------------------------------
 
         # if width < min_width or height < min_height:
@@ -674,6 +709,8 @@ with left:
 
     table_columns = [
 
+        "UUID",
+
         "PPP Art No",
 
         "Supplier Art No",
@@ -710,7 +747,6 @@ with left:
 
         "Ready for Configuration",
     ]
-
 
     event = st.dataframe(
 
@@ -751,7 +787,7 @@ with right:
 
 
         # ----------------------------------------------------
-        # GET COMPLETE DETAILS AGAIN
+        # GET COMPLETE DETAILS
         # ----------------------------------------------------
 
         details = get_bottle_params(
@@ -796,6 +832,11 @@ with right:
 
         st.markdown(
             "### Identification"
+        )
+
+        st.write(
+            f"**UUID:** "
+            f"{row['UUID']}"
         )
 
         st.write(
@@ -867,6 +908,14 @@ with right:
             or []
         )
 
+        # Make sure it is a list
+        if not isinstance(
+            printing_areas,
+            list
+        ):
+
+            printing_areas = []
+
 
         if not printing_areas:
 
@@ -885,36 +934,67 @@ with right:
                     f"#### Printing Area {i}"
                 )
 
+                # ------------------------------------------------
+                # PRINTING AREA UUID
+                # ------------------------------------------------
+
+                st.write(
+                    f"**UUID:** "
+                    f"{area.get('uuid')}"
+                )
+
+                # ------------------------------------------------
+                # NAME
+                # ------------------------------------------------
+
                 st.write(
                     f"**Name:** "
                     f"{area.get('name')}"
                 )
+
+                # ------------------------------------------------
+                # WIDTH
+                # ------------------------------------------------
 
                 st.write(
                     f"**Width:** "
                     f"{area.get('width')}"
                 )
 
+                # ------------------------------------------------
+                # HEIGHT
+                # ------------------------------------------------
+
                 st.write(
                     f"**Height:** "
                     f"{area.get('height')}"
                 )
+
+                # ------------------------------------------------
+                # DISTANCE TO BOTTOM
+                # ------------------------------------------------
 
                 st.write(
                     f"**Distance to Bottom:** "
                     f"{area.get('bottomDistance')}"
                 )
 
+                # ------------------------------------------------
+                # PRINT MODES
+                # ------------------------------------------------
+
                 st.write(
                     f"**Type:** "
                     f"{area.get('printModes')}"
                 )
 
+                # ------------------------------------------------
+                # CONFIGURATION IMAGE
+                # ------------------------------------------------
 
                 config_image = (
                     area.get("configImageUrl")
                 )
-
 
                 if config_image:
 
@@ -994,7 +1074,7 @@ with right:
 
 
         # ====================================================
-        # STATUS
+        # CONFIGURATION STATUS
         # ====================================================
 
         st.divider()
