@@ -85,7 +85,6 @@ def get_full_bottle(bottle):
     image_url = None
 
     if product_images:
-
         image_url = product_images[0].get("url")
 
 
@@ -106,13 +105,16 @@ def get_full_bottle(bottle):
 
     printing_areas = details.get("printingAreas") or []
 
-
     if printing_areas:
 
-        # Take the first printing area
         pa = printing_areas[0] or {}
 
+        # ----------------------------------------------------
+        # PRINTING AREA EXISTS
+        # ----------------------------------------------------
+
         has_printing_area = "🟢 Yes"
+
 
         # ----------------------------------------------------
         # PA NAME
@@ -122,6 +124,7 @@ def get_full_bottle(bottle):
             pa.get("name")
         )
 
+
         # ----------------------------------------------------
         # PA WIDTH
         # ----------------------------------------------------
@@ -129,6 +132,7 @@ def get_full_bottle(bottle):
         pa_width = yes_no_badge(
             pa.get("width")
         )
+
 
         # ----------------------------------------------------
         # PA HEIGHT
@@ -138,28 +142,21 @@ def get_full_bottle(bottle):
             pa.get("height")
         )
 
-        # ----------------------------------------------------
-        # PA DIAMETER
-        # ----------------------------------------------------
-
-        pa_diameter = yes_no_badge(
-            pa.get("diameter")
-        )
 
         # ----------------------------------------------------
         # PA IMAGE
         # ----------------------------------------------------
+        #
+        # PA image is specifically determined by
+        # configImageUrl.
+        #
 
-        # Check the most common possible image fields.
-        pa_image = (
-            pa.get("image")
-            or pa.get("imageUrl")
-            or pa.get("url")
-            or pa.get("imageURL")
+        config_image_url = pa.get(
+            "configImageUrl"
         )
 
-        pa_image_status = yes_no_badge(
-            pa_image
+        pa_image = yes_no_badge(
+            config_image_url
         )
 
     else:
@@ -168,8 +165,7 @@ def get_full_bottle(bottle):
         # NO PRINTING AREA
         # ====================================================
         #
-        # IMPORTANT:
-        # If printingAreas == [], ALL PA specifications
+        # If printingAreas == [], every PA specification
         # must be No.
         #
 
@@ -178,8 +174,7 @@ def get_full_bottle(bottle):
         pa_name = "🔴 No"
         pa_width = "🔴 No"
         pa_height = "🔴 No"
-        pa_diameter = "🔴 No"
-        pa_image_status = "🔴 No"
+        pa_image = "🔴 No"
 
 
     # ========================================================
@@ -270,9 +265,7 @@ def get_full_bottle(bottle):
 
         "PA Height": pa_height,
 
-        "PA Diameter": pa_diameter,
-
-        "PA Image": pa_image_status,
+        "PA Image": pa_image,
 
 
         # ----------------------------------------------------
@@ -830,12 +823,6 @@ with right:
         st.write(
             f"**PA Height:** "
             f"{row['PA Height']}"
-        )
-
-
-        st.write(
-            f"**PA Diameter:** "
-            f"{row['PA Diameter']}"
         )
 
 
