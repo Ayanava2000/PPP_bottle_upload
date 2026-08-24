@@ -595,7 +595,7 @@ supplier_totals = {
 
     "Heinz-Glas": 264,
 
-    "Gläser & Flaschen": 385,
+    "Gläser & Flaschen": 301,
 
     "Unknown (None)": 3
 }
