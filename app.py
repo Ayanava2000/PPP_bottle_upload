@@ -587,7 +587,7 @@ supplier_counts = (
 
 supplier_totals = {
 
-    "Wiegand-Glas": 970,
+    "Wiegand-Glas": 887,
 
     "Etivera": 189,
 
